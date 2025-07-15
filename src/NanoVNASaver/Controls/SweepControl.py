@@ -57,6 +57,9 @@ class SweepControl(Control):
         super().__init__(app, "Sweep control")
 
         sweep_settings = self.get_settings()
+        pa_settings = {
+            "config": "[1111][1111][1111][1111]"
+        }
 
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.Shape.VLine)
@@ -65,9 +68,11 @@ class SweepControl(Control):
         input_layout_l = QtWidgets.QFormLayout()
         input_layout_r = QtWidgets.QFormLayout()
 
+
         input_layout.addLayout(input_layout_l)
         input_layout.addWidget(line)
         input_layout.addLayout(input_layout_r)
+        input_layout.addWidget(line)
 
         self.layout.addRow(input_layout)
 
@@ -76,7 +81,9 @@ class SweepControl(Control):
             "Stop": FrequencyInputWidget(sweep_settings.end),
             "Center": FrequencyInputWidget(sweep_settings.center),
             "Span": FrequencyInputWidget(sweep_settings.span),
+            "Config": FrequencyInputWidget(pa_settings['config'])
         }
+
         self.inputs["Start"].textEdited.connect(self.update_center_span)
         self.inputs["Start"].textChanged.connect(self.update_step_size)
         self.inputs["Stop"].textEdited.connect(self.update_center_span)
@@ -88,6 +95,17 @@ class SweepControl(Control):
         input_layout_l.addRow(QtWidgets.QLabel("Stop"), self.inputs["Stop"])
         input_layout_r.addRow(QtWidgets.QLabel("Center"), self.inputs["Center"])
         input_layout_r.addRow(QtWidgets.QLabel("Span"), self.inputs["Span"])
+        
+        pa_layout = QtWidgets.QHBoxLayout()
+        self.layout.addRow(pa_layout)
+        pa_input_layout = QtWidgets.QFormLayout()
+        pa_input_layout.addRow(QtWidgets.QLabel("Config"), self.inputs["Config"])
+        pa_cfg_btn = QtWidgets.QPushButton("CFG")
+        pa_cfg_btn.setFixedHeight(20)
+        pa_cfg_btn.clicked.connect(lambda: self.app.configure_pa(self.inputs["Config"]))
+        pa_input_layout.addWidget(pa_cfg_btn)
+        pa_layout.addLayout(pa_input_layout)
+
 
         self.input_segments = QtWidgets.QLineEdit(sweep_settings.segments)
         self.input_segments.textEdited.connect(self.update_step_size)

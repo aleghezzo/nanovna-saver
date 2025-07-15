@@ -24,6 +24,8 @@ from time import localtime, strftime
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QWidget
+from smbus2 import SMBus, i2c_msg
+import re
 
 from .About import VERSION
 from .Calibration import Calibration
@@ -488,6 +490,28 @@ class NanoVNASaver(QWidget):
         # https://www.pythonguis.com/tutorials/multithreading-pyqt6-applications-qthreadpool/
         # self.threadpool.start(self.worker)
 
+    def configure_pa(self, cfg):
+        logger.warning("Triggered PA config")
+        expanders = [PCF8574(addr) for addr in I2C_ADDRESSES]
+
+        for i, expander in enumerate(expanders):
+            if expander.available:
+                print(f"Extensor detectado en 0x{I2C_ADDRESSES[i]:02X}")
+            else:
+                print(f"Extensor NO detectado en 0x{I2C_ADDRESSES[i]:02X}")
+
+        if(args.clear is True):
+                print("Clearing")
+                for expander in expanders:
+                    expander.clear()
+        else:
+            result = parse_four_inputs(cfg)
+            print("[",hex(result[0]),"][",hex(result[1]),"][",hex(result[2]),"][",hex(result[3]),"]")
+            if result:
+                for expander, value in zip(expanders, result):
+                    expander.write_all(value)
+                    print("Escritura completada.")
+
     def saveData(self, data, data21, source=None):
         with self.dataLock:
             self.data.s11 = data
@@ -718,3 +742,54 @@ class NanoVNASaver(QWidget):
     def update_sweep_title(self):
         for c in self.subscribing_charts:
             c.setSweepTitle(self.sweep.properties.name)
+
+
+# Direcciones I2C de los expanders
+I2C_ADDRESSES = [0x20, 0x21, 0x22, 0x23]
+
+class PCF8574:
+    def __init__(self, address, bus=1):
+        self.address = address
+        self.bus = SMBus(bus)
+        self.state = 0x00
+        self.available = self._check_device()
+
+    def _check_device(self):
+        try:
+            # Prueba simple de lectura (no importa el valor)
+            self.bus.read_byte(self.address)
+            return True
+        except Exception:
+            return False
+
+    def write_all(self, value):
+        if not self.available:
+            print(f"El extensor en 0x{self.address:02X} no responde. Se omitira.")
+            return
+        value &= 0xFF
+        self.state = value
+        try:
+            self.bus.write_byte(self.address, self.state)
+        except Exception as e:
+            print(f"Error al escribir en 0x{self.address:02X}: {e}")
+
+    def clear(self):
+        self.write_all(0xFF)
+
+def parse_four_inputs(input_str):
+    input_str = input_str.strip().replace(" ", "")
+    match = re.fullmatch(r"\[(\d{4})\]\[(\d{4})\]\[(\d{4})\]\[(\d{4})\]", input_str)
+    if not match:
+        print("? Formato invalido. Use [XXXX][XXXX][XXXX][XXXX] con 0s y 1s.")
+        return None
+
+    bitgroups = [match.group(i) for i in range(1, 5)]
+    byte_values = []
+
+    for bits in bitgroups:
+        nibble = int(bits, 2)
+        complement = (~nibble) & 0x0F
+        byte = (nibble << 4) | complement
+        byte_values.append(byte)
+
+    return byte_values

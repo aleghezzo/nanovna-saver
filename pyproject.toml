@@ -30,6 +30,7 @@ dependencies=[
   'pyside6~=6.8',
   'numpy~=2.1',
   'scipy~=1.14',
+  'smbus2~=0.5.0',
 ]
 
 [dependency-groups]
@@ -40,13 +41,11 @@ dev = [
   "mypy~=1.14",
   "pylint~=3.3",
   "types-pyserial~=3.5",
-
   # Testing
   "pytest~=8.3",
   "pytest-cov~=6.0",
   "tox~=4.23",
   "tox-uv~=1.17",
-
   # Build helpers
   "setuptools-scm>=8",
   "taskipy~=1.14",
