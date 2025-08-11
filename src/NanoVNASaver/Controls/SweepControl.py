@@ -18,6 +18,9 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import logging
 from typing import TYPE_CHECKING
+import string
+from ..Touchstone import Touchstone
+from ..RFTools import Datapoint
 
 from PySide6 import QtCore, QtWidgets
 
@@ -35,6 +38,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class PhasedArrayCommonInputWidget(QtWidgets.QLineEdit):
+    def __init__(self, text=""):
+        super().__init__(text)
+        self.setFixedHeight(20)
+        self.setMinimumWidth(60)
+
+    def get_value(self) -> str:
+        return self.text
 
 class FrequencyInputWidget(QtWidgets.QLineEdit):
     def __init__(self, text=""):
@@ -57,8 +69,9 @@ class SweepControl(Control):
         super().__init__(app, "Sweep control")
 
         sweep_settings = self.get_settings()
-        pa_settings = {
-            "config": "[1111][1111][1111][1111]"
+        self.test = "[1111][1111][1111][1111]"
+        self.pa_settings = {
+            "config": self.test 
         }
 
         line = QtWidgets.QFrame()
@@ -81,7 +94,10 @@ class SweepControl(Control):
             "Stop": FrequencyInputWidget(sweep_settings.end),
             "Center": FrequencyInputWidget(sweep_settings.center),
             "Span": FrequencyInputWidget(sweep_settings.span),
-            "Config": FrequencyInputWidget(pa_settings['config'])
+        }
+
+        self.pa_inputs: dict[str, PhasedArrayCommonInputWidget] = {
+            "Config": PhasedArrayCommonInputWidget(self.pa_settings['config']),
         }
 
         self.inputs["Start"].textEdited.connect(self.update_center_span)
@@ -99,11 +115,24 @@ class SweepControl(Control):
         pa_layout = QtWidgets.QHBoxLayout()
         self.layout.addRow(pa_layout)
         pa_input_layout = QtWidgets.QFormLayout()
-        pa_input_layout.addRow(QtWidgets.QLabel("Config"), self.inputs["Config"])
+        pa_input_layout.addRow(QtWidgets.QLabel("Config"), self.pa_inputs["Config"])
         pa_cfg_btn = QtWidgets.QPushButton("CFG")
         pa_cfg_btn.setFixedHeight(20)
-        pa_cfg_btn.clicked.connect(lambda: self.app.configure_pa(self.inputs["Config"]))
+        pa_clr_btn = QtWidgets.QPushButton("CLEAR")
+        pa_clr_btn.setFixedHeight(20)
+        pa_cfg_btn.clicked.connect(lambda: self.app.configure_pa(self.pa_inputs["Config"].text()))
+        pa_clr_btn.clicked.connect(self.app.clear_pa)
         pa_input_layout.addWidget(pa_cfg_btn)
+        pa_input_layout.addWidget(pa_clr_btn)
+
+        btn_export_file = QtWidgets.QPushButton("Save 1-Port file (S1P)")
+        btn_export_file.clicked.connect(lambda: self.exportFile(1, self.pa_inputs["Config"].text()))
+        pa_input_layout.addRow(btn_export_file)
+
+        btn_export_file = QtWidgets.QPushButton("Save 2-Port file (S2P)")
+        btn_export_file.clicked.connect(lambda: self.exportFile(4, self.pa_inputs["Config"].text()))
+        pa_input_layout.addRow(btn_export_file)
+
         pa_layout.addLayout(pa_input_layout)
 
 
@@ -305,3 +334,37 @@ class SweepControl(Control):
                 self.inputs["Stop"].setStyleSheet("QLineEdit { color: red; }")
         self.inputs["Start"].repaint()
         self.inputs["Stop"].repaint()
+
+    def exportFile(self, nr_params: int = 1, new_filename: string = ""):
+        if len(self.app.data.s11) == 0:
+            QtWidgets.QMessageBox.warning(
+                self, "No data to save", "There is no data to save."
+            )
+            return
+        if nr_params > 2 and len(self.app.data.s21) == 0:
+            QtWidgets.QMessageBox.warning(
+                self, "No S21 data to save", "There is no S21 data to save."
+            )
+            return
+
+        if nr_params == 1:
+            filename = new_filename + ".s1p"
+        else:
+            filename = new_filename + ".s2p"
+        
+        if (filename == ".s1p" or filename == ".s2p"):
+            logger.debug("No file name selected.")
+            return
+
+        ts = Touchstone('measurements/'+filename)
+        ts.sdata[0] = self.app.data.s11
+        if nr_params > 1:
+            ts.sdata[1] = self.app.data.s21
+            for dp in self.app.data.s11:
+                ts.sdata[2].append(Datapoint(dp.freq, 0, 0))
+                ts.sdata[3].append(Datapoint(dp.freq, 0, 0))
+        try:
+            ts.save(nr_params)
+        except IOError as e:
+            logger.exception("Error during file export: %s", e)
+            return
