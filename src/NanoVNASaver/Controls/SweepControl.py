@@ -70,8 +70,9 @@ class SweepControl(Control):
 
         sweep_settings = self.get_settings()
         self.test = "[1111][1111][1111][1111]"
+        self.full_sweep = ""
         self.pa_settings = {
-            "config": self.test 
+            "config": self.test
         }
 
         line = QtWidgets.QFrame()
@@ -133,9 +134,17 @@ class SweepControl(Control):
         btn_export_file.clicked.connect(lambda: self.exportFile(4, self.pa_inputs["Config"].text()))
         pa_input_layout.addRow(btn_export_file)
 
+        btn_full_sweep = QtWidgets.QPushButton("Full Process")
+        pa_input_layout.addRow(btn_full_sweep)
+        
+        self.multi_line_input = QtWidgets.QTextEdit()
+        self.multi_line_input.setFixedHeight(60)   # optional
+        self.multi_line_input.setPlaceholderText("")
+        pa_input_layout.addWidget(self.multi_line_input)
+
         pa_layout.addLayout(pa_input_layout)
 
-
+        btn_full_sweep.clicked.connect(lambda: self.full_process(self.multi_line_input.toPlainText()))
         self.input_segments = QtWidgets.QLineEdit(sweep_settings.segments)
         self.input_segments.textEdited.connect(self.update_step_size)
 
@@ -186,6 +195,16 @@ class SweepControl(Control):
         btn.setEnabled(False)
         return btn
 
+    def full_process(self, _list):
+        for line in _list.splitlines():
+            print(f"Processing line: {line}")
+            self.app.configure_pa(line)
+            self.app.sweep_start()
+            time.sleep(1)
+            self.exportFile(1, line)
+            self.exportFile(4, line)
+            time.sleep(1)
+    
     def _build_stop_button(self) -> QtWidgets.QPushButton:
         btn = QtWidgets.QPushButton("Stop")
         btn.setFixedHeight(20)
